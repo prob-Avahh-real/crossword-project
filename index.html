@@ -1,0 +1,694 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>填字游戏 — Crossword</title>
+  <style>
+    :root {
+      --primary: #2563eb;
+      --primary-light: #dbeafe;
+      --bg: #f8fafc;
+      --text: #1e293b;
+      --muted: #94a3b8;
+      --cell-active: #ffe066;
+      --cell-highlight: #e8f4fd;
+      --cell-border: #cbd5e1;
+      --black: #1a1a2e;
+      --green: #059669;
+      --red: #dc2626;
+      --key-bg: #fff;
+      --key-shadow: rgba(0,0,0,0.1);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      overscroll-behavior: none;
+      -webkit-user-select: none;
+      user-select: none;
+      touch-action: manipulation;
+    }
+
+    .header {
+      background: #fff;
+      padding: 10px 16px 6px;
+      border-bottom: 1px solid #e2e8f0;
+    }
+    .header-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .header-title { font-size: 17px; font-weight: 700; color: var(--text); }
+    .reset-btn {
+      padding: 4px 12px; border-radius: 6px;
+      background: #f1f5f9; border: 1px solid #e2e8f0;
+      font-size: 12px; font-weight: 600; color: #64748b;
+      cursor: pointer;
+    }
+    .reset-btn:active { background: #e2e8f0; }
+    .stats {
+      display: flex; gap: 20px; margin-top: 6px;
+    }
+    .stat-label { font-size: 11px; color: var(--muted); font-weight: 500; }
+    .stat-value { font-size: 12px; font-weight: 600; color: #334155; }
+    .progress-bar {
+      height: 3px; background: #e2e8f0; border-radius: 2px;
+      margin-top: 6px; overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%; background: var(--green); border-radius: 2px;
+      transition: width 0.3s ease;
+    }
+
+    .puzzle-tabs {
+      display: flex; gap: 6px; padding: 10px 16px;
+      background: #fff; border-bottom: 1px solid #e2e8f0;
+      overflow-x: auto;
+    }
+    .puzzle-tab {
+      padding: 5px 14px; border-radius: 16px;
+      font-size: 12px; font-weight: 600;
+      background: #f1f5f9; color: #64748b;
+      border: 1px solid transparent; cursor: pointer;
+      white-space: nowrap;
+    }
+    .puzzle-tab.active {
+      background: var(--primary); color: #fff; border-color: var(--primary);
+    }
+    .puzzle-tab:active { opacity: 0.8; }
+
+    .main { display: flex; flex: 1; }
+    .grid-area { flex: 1; display: flex; align-items: flex-start; justify-content: center; padding: 8px; }
+
+    .grid-container { display: inline-block; }
+    .grid-row { display: flex; }
+    .cell {
+      width: 36px; height: 36px;
+      border: 0.5px solid var(--cell-border);
+      display: flex; align-items: center; justify-content: center;
+      position: relative; cursor: pointer;
+      background: #fff;
+    }
+    .cell.black { background: var(--black); border-color: var(--black); }
+    .cell.highlighted { background: var(--cell-highlight); border-color: #60a5fa; }
+    .cell.active { background: var(--cell-active); border-color: #f59e0b; }
+    .cell-text { font-size: 18px; font-weight: 600; color: var(--text); }
+    .cell.correct .cell-text { color: var(--green); }
+    .cell.wrong .cell-text { color: var(--red); }
+    .cell-number {
+      position: absolute; top: 1px; left: 2px;
+      font-size: 8px; font-weight: 500; color: var(--muted);
+      line-height: 1;
+    }
+
+    .bottom {
+      background: #fff;
+      border-top: 1px solid #e2e8f0;
+    }
+
+    .clue-area {
+      border-bottom: 1px solid #e2e8f0;
+    }
+    .clue-tabs {
+      display: flex;
+    }
+    .clue-tab {
+      flex: 1; padding: 8px; text-align: center;
+      font-size: 12px; font-weight: 600; color: var(--muted);
+      cursor: pointer; border-bottom: 2px solid transparent;
+    }
+    .clue-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+    .clue-list {
+      display: flex; gap: 6px; padding: 6px 12px;
+      overflow-x: auto; min-height: 38px;
+    }
+    .clue-item {
+      flex-shrink: 0; padding: 4px 10px;
+      border-radius: 14px; font-size: 12px;
+      background: #f1f5f9; color: #334155;
+      cursor: pointer; white-space: nowrap;
+    }
+    .clue-item.active { background: var(--primary-light); color: var(--primary); font-weight: 600; }
+    .clue-item.completed { opacity: 0.5; text-decoration: line-through; }
+    .clue-item:active { opacity: 0.7; }
+
+    .keyboard {
+      padding: 4px 4px 8px; background: #e5e7eb;
+      display: flex; flex-direction: column; align-items: center;
+    }
+    .key-row { display: flex; justify-content: center; margin: 1.5px 0; }
+    .key {
+      width: 34px; height: 38px; margin: 0 2px;
+      background: #fff; border: none; border-radius: 5px;
+      font-size: 15px; font-weight: 500; color: #1f2937;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 1px 2px var(--key-shadow);
+    }
+    .key:active { background: #e5e7eb; }
+    .key.disabled { opacity: 0.4; }
+    .key-del {
+      width: 72px; background: #d1d5db; font-size: 12px;
+    }
+
+    .modal-overlay {
+      display: none;
+      position: fixed; inset: 0; z-index: 100;
+      background: rgba(0,0,0,0.5);
+      justify-content: center; align-items: center;
+    }
+    .modal-overlay.show { display: flex; }
+    .modal-card {
+      background: #fff; border-radius: 20px; padding: 32px;
+      width: 85%; max-width: 340px;
+      text-align: center;
+    }
+    .modal-emoji { font-size: 48px; margin-bottom: 8px; }
+    .modal-title { font-size: 24px; font-weight: 700; margin-bottom: 4px; }
+    .modal-subtitle { font-size: 14px; color: #64748b; margin-bottom: 24px; }
+    .modal-stats { display: flex; justify-content: center; align-items: center; margin-bottom: 28px; gap: 0; }
+    .modal-stat { text-align: center; padding: 0 16px; }
+    .modal-stat-value { font-size: 18px; font-weight: 700; color: var(--primary); margin-bottom: 2px; }
+    .modal-stat-label { font-size: 11px; color: var(--muted); font-weight: 500; }
+    .modal-divider { width: 1px; height: 32px; background: #e2e8f0; }
+    .modal-btn {
+      background: var(--primary); color: #fff;
+      border: none; padding: 12px 40px; border-radius: 12px;
+      font-size: 16px; font-weight: 600; cursor: pointer;
+    }
+    .modal-btn:active { opacity: 0.8; }
+
+    @media (min-width: 500px) {
+      .cell { width: 44px; height: 44px; }
+      .cell-text { font-size: 22px; }
+    }
+  </style>
+</head>
+<body>
+<div class="header">
+  <div class="header-row">
+    <span class="header-title" id="puzzleTitle">填字游戏</span>
+    <button class="reset-btn" onclick="game.resetGame()">重置</button>
+  </div>
+  <div class="stats">
+    <div><span class="stat-label">时间</span> <span class="stat-value" id="timer">00:00</span></div>
+    <div><span class="stat-label">进度</span> <span class="stat-value" id="progress">0/0 (0%)</span></div>
+  </div>
+  <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+</div>
+
+<div class="puzzle-tabs" id="puzzleTabs"></div>
+
+<div class="main">
+  <div class="grid-area">
+    <div class="grid-container" id="grid"></div>
+  </div>
+</div>
+
+<div class="bottom">
+  <div class="clue-area">
+    <div class="clue-tabs">
+      <div class="clue-tab active" data-dir="across" onclick="game.setDirection('across')">横向 Across</div>
+      <div class="clue-tab" data-dir="down" onclick="game.setDirection('down')">纵向 Down</div>
+    </div>
+    <div class="clue-list" id="clueList"></div>
+  </div>
+  <div class="keyboard" id="keyboard"></div>
+</div>
+
+<div class="modal-overlay" id="completionModal">
+  <div class="modal-card">
+    <div class="modal-emoji">🎉</div>
+    <div class="modal-title">恭喜完成！</div>
+    <div class="modal-subtitle">你成功解出了整个填字游戏</div>
+    <div class="modal-stats">
+      <div class="modal-stat">
+        <div class="modal-stat-value" id="modalTime">00:00</div>
+        <div class="modal-stat-label">用时</div>
+      </div>
+      <div class="modal-divider"></div>
+      <div class="modal-stat">
+        <div class="modal-stat-value" id="modalAccuracy">0%</div>
+        <div class="modal-stat-label">正确率</div>
+      </div>
+      <div class="modal-divider"></div>
+      <div class="modal-stat">
+        <div class="modal-stat-value" id="modalScore">0/0</div>
+        <div class="modal-stat-label">完成格数</div>
+      </div>
+    </div>
+    <button class="modal-btn" onclick="game.resetGame()">再来一局</button>
+  </div>
+</div>
+
+<script>
+  // ===== Puzzles Data =====
+  const PUZZLES = [
+    { id: 'p1', title: '四大名著', width: 8, height: 8, grid: [
+      ['',  '',  '三', '国', '',  '',  '',  '' ],
+      ['西', '游', '演', '',  '',  '',  '',  '' ],
+      ['',  '',  '义', '',  '',  '',  '',  '' ],
+      ['',  '红', '楼', '梦', '',  '',  '',  '' ],
+      ['',  '',  '',  '',  '',  '',  '',  '' ],
+      ['',  '',  '',  '',  '',  '水', '浒', '传'],
+      ['',  '',  '',  '',  '',  '',  '',  '' ],
+      ['',  '',  '',  '',  '',  '',  '',  '' ],
+    ], clues: [
+      { n:1, r:0, c:2, q:'罗贯中所著历史小说', a:'三国演义', d:'across' },
+      { n:2, r:1, c:0, q:'唐僧师徒取经的故事', a:'西游记', d:'across' },
+      { n:3, r:3, c:1, q:'曹雪芹所著，大观园中的故事', a:'红楼梦', d:'across' },
+      { n:4, r:5, c:5, q:'一百单八将聚义梁山', a:'水浒传', d:'across' },
+    ]},
+    { id: 'p2', title: '成语接龙', width: 6, height: 6, grid: [
+      ['',  '',  '一', '',  '',  '' ],
+      ['',  '心', '心', '一', '意', '' ],
+      ['',  '',  '',  '',  '',  '' ],
+      ['',  '万', '事', '如', '意', '' ],
+      ['',  '',  '',  '',  '',  '' ],
+      ['',  '',  '',  '',  '',  '' ],
+    ], clues: [
+      { n:1, r:1, c:1, q:'形容专注，心无旁骛', a:'一心一意', d:'across' },
+      { n:2, r:3, c:1, q:'祝愿一切顺遂', a:'万事如意', d:'across' },
+    ]},
+    { id: 'p3', title: '中国传统节日', width: 7, height: 7, grid: [
+      ['春', '节', '',  '',  '',  '',  '' ],
+      ['',  '',  '',  '',  '',  '',  '' ],
+      ['',  '中', '秋', '节', '',  '',  '' ],
+      ['',  '',  '',  '',  '',  '',  '' ],
+      ['端', '午', '节', '',  '',  '',  '' ],
+      ['',  '',  '',  '',  '',  '',  '' ],
+      ['',  '元', '宵', '节', '',  '',  '' ],
+    ], clues: [
+      { n:1, r:0, c:0, q:'农历正月初一，贴春联放鞭炮', a:'春节', d:'across' },
+      { n:2, r:2, c:1, q:'农历八月十五，赏月吃月饼', a:'中秋节', d:'across' },
+      { n:3, r:4, c:0, q:'农历五月初五，赛龙舟吃粽子', a:'端午节', d:'across' },
+      { n:4, r:6, c:1, q:'农历正月十五，赏花灯吃汤圆', a:'元宵节', d:'across' },
+    ]},
+    { id: 'p4', title: '十二生肖', width: 8, height: 7, grid: [
+      ['鼠', '',  '',  '',  '',  '',  '',  '' ],
+      ['牛', '',  '',  '',  '',  '',  '',  '' ],
+      ['虎', '',  '龙', '腾', '虎', '跃', '',  '' ],
+      ['兔', '',  '',  '',  '',  '',  '',  '' ],
+      ['龙', '',  '',  '',  '',  '',  '',  '' ],
+      ['蛇', '',  '',  '',  '',  '',  '',  '' ],
+      ['马', '',  '',  '',  '',  '',  '',  '' ],
+    ], clues: [
+      { n:1, r:2, c:2, q:'形容气势磅礴的成语', a:'龙腾虎跃', d:'across' },
+      { n:2, r:0, c:0, q:'十二生肖第一位，子鼠', a:'鼠', d:'down' },
+      { n:3, r:1, c:0, q:'十二生肖第二位，丑牛', a:'牛', d:'down' },
+      { n:4, r:2, c:0, q:'十二生肖第三位，寅虎', a:'虎', d:'down' },
+      { n:5, r:3, c:0, q:'十二生肖第四位，卯兔', a:'兔', d:'down' },
+      { n:6, r:4, c:0, q:'十二生肖第五位，辰龙', a:'龙', d:'down' },
+      { n:7, r:5, c:0, q:'十二生肖第六位，巳蛇', a:'蛇', d:'down' },
+      { n:8, r:6, c:0, q:'十二生肖第七位，午马', a:'马', d:'down' },
+    ]},
+    { id: 'p5', title: '唐诗名句', width: 5, height: 5, grid: [
+      ['床', '前', '明', '月', '光'],
+      ['',  '',  '',  '',  '' ],
+      ['疑', '是', '地', '上', '霜'],
+      ['',  '',  '',  '',  '' ],
+      ['举', '头', '望', '明', '月'],
+    ], clues: [
+      { n:1, r:0, c:0, q:'李白《静夜思》第一句', a:'床前明月光', d:'across' },
+      { n:2, r:2, c:0, q:'李白《静夜思》第二句', a:'疑是地上霜', d:'across' },
+      { n:3, r:4, c:0, q:'李白《静夜思》第三句', a:'举头望明月', d:'across' },
+    ]},
+  ];
+
+  const CHINESE_ROWS = [
+    ['一','二','三','四','五','六','七','八','九','十'],
+    ['不','大','小','中','人','天','地','日','月','星'],
+    ['山','水','风','云','雨','雪','花','草','树','木'],
+    ['龙','凤','虎','马','牛','羊','鸡','狗','猪','鼠'],
+    ['心','手','头','眼','口','身','家','国','城','乡'],
+  ];
+
+  class CrosswordGame {
+    constructor() {
+      this.puzzleIdx = 0;
+      this.cells = [];
+      this.selectedR = -1;
+      this.selectedC = -1;
+      this.direction = 'across';
+      this.completedClues = new Set();
+      this.correctCells = 0;
+      this.isComplete = false;
+      this.startTime = Date.now();
+      this.elapsed = 0;
+      this.timerInterval = null;
+      this.init();
+    }
+
+    get puzzle() { return PUZZLES[this.puzzleIdx]; }
+
+    init() {
+      this.renderPuzzleTabs();
+      this.loadPuzzle(0);
+      this.renderKeyboard();
+      this.startTimer();
+    }
+
+    loadPuzzle(idx) {
+      this.puzzleIdx = idx;
+      this.cells = this.buildCells();
+      this.selectedR = -1;
+      this.selectedC = -1;
+      this.direction = 'across';
+      this.completedClues = new Set();
+      this.correctCells = 0;
+      this.isComplete = false;
+      this.startTime = Date.now();
+      this.elapsed = 0;
+      this.renderAll();
+      this.updatePuzzleTabs();
+      document.getElementById('completionModal').classList.remove('show');
+    }
+
+    buildCells() {
+      const p = this.puzzle;
+      const clueStartMap = {};
+      for (const c of p.clues) {
+        const key = c.r + ',' + c.c;
+        if (!(key in clueStartMap)) clueStartMap[key] = c.n;
+      }
+      const cells = [];
+      for (let r = 0; r < p.height; r++) {
+        const row = [];
+        for (let c = 0; c < p.width; c++) {
+          const ans = p.grid[r]?.[c] ?? '';
+          row.push({
+            r, c,
+            answer: ans,
+            userLetter: '',
+            isBlack: ans === '',
+            isHighlighted: false,
+            isActive: false,
+            clueNumber: clueStartMap[r+','+c] || 0,
+          });
+        }
+        cells.push(row);
+      }
+      return cells;
+    }
+
+    getWordCells(r, c, dir) {
+      const result = [];
+      if (dir === 'across') {
+        let sc = c;
+        while (sc > 0 && !this.cells[r][sc - 1].isBlack) sc--;
+        for (let i = sc; i < this.puzzle.width; i++) {
+          if (this.cells[r][i].isBlack) break;
+          result.push(this.cells[r][i]);
+        }
+      } else {
+        let sr = r;
+        while (sr > 0 && !this.cells[sr - 1][c].isBlack) sr--;
+        for (let i = sr; i < this.puzzle.height; i++) {
+          if (this.cells[i][c].isBlack) break;
+          result.push(this.cells[i][c]);
+        }
+      }
+      return result;
+    }
+
+    findClue(r, c, dir) {
+      let sr = r, sc = c;
+      if (dir === 'across') {
+        while (sc > 0 && this.puzzle.grid[sr][sc - 1] !== '') sc--;
+      } else {
+        while (sr > 0 && this.puzzle.grid[sr - 1][sc] !== '') sr--;
+      }
+      return this.puzzle.clues.find(cl => cl.r === sr && cl.c === sc && cl.d === dir);
+    }
+
+    isWordComplete(r, c, dir) {
+      return this.getWordCells(r, c, dir).every(cell => cell.userLetter === cell.answer);
+    }
+
+    computeCompletedClues() {
+      const done = new Set();
+      for (const clue of this.puzzle.clues) {
+        if (this.isWordComplete(clue.r, clue.c, clue.d)) done.add(clue.n);
+      }
+      return done;
+    }
+
+    selectCell(r, c) {
+      const cell = this.cells[r]?.[c];
+      if (!cell || cell.isBlack) return;
+
+      if (r === this.selectedR && c === this.selectedC) {
+        this.direction = this.direction === 'across' ? 'down' : 'across';
+        this.updateHighlights();
+        this.renderGrid();
+        this.renderClues();
+        this.updateClueTabs();
+        return;
+      }
+
+      this.selectedR = r;
+      this.selectedC = c;
+      this.updateHighlights();
+      this.renderAll();
+    }
+
+    setDirection(dir) {
+      this.direction = dir;
+      if (this.selectedR >= 0) this.updateHighlights();
+      this.renderGrid();
+      this.renderClues();
+      this.updateClueTabs();
+    }
+
+    enterLetter(char) {
+      if (this.isComplete || this.selectedR < 0 || this.selectedC < 0) return;
+      const cell = this.cells[this.selectedR][this.selectedC];
+      if (!cell || cell.isBlack) return;
+
+      cell.userLetter = char;
+      this.correctCells = this.cells.flat().filter(c => !c.isBlack && c.userLetter === c.answer).length;
+      this.completedClues = this.computeCompletedClues();
+      if (this.completedClues.size === new Set(this.puzzle.clues.map(c => c.n)).size) {
+        this.isComplete = true;
+        this.showCompletion();
+      }
+
+      const next = this.getNextCell();
+      if (next) {
+        this.selectedR = next.r;
+        this.selectedC = next.c;
+        this.updateHighlights();
+      }
+
+      this.renderAll();
+    }
+
+    deleteLetter() {
+      if (this.isComplete || this.selectedR < 0 || this.selectedC < 0) return;
+      const cell = this.cells[this.selectedR][this.selectedC];
+      if (!cell || cell.isBlack) return;
+
+      if (cell.userLetter === '') {
+        const wordCells = this.getWordCells(this.selectedR, this.selectedC, this.direction);
+        const idx = wordCells.findIndex(c => c.r === this.selectedR && c.c === this.selectedC);
+        if (idx > 0) {
+          const prev = wordCells[idx - 1];
+          this.selectedR = prev.r;
+          this.selectedC = prev.c;
+          this.updateHighlights();
+        }
+      } else {
+        const wasCorrect = cell.userLetter === cell.answer;
+        cell.userLetter = '';
+        if (wasCorrect) {
+          this.correctCells = this.cells.flat().filter(c => !c.isBlack && c.userLetter === c.answer).length;
+        }
+        this.completedClues = this.computeCompletedClues();
+      }
+      this.renderAll();
+    }
+
+    getNextCell() {
+      const dir = this.direction;
+      if (dir === 'across') {
+        for (let nc = this.selectedC + 1; nc < this.puzzle.width; nc++) {
+          const cell = this.cells[this.selectedR][nc];
+          if (!cell || cell.isBlack) break;
+          return { r: this.selectedR, c: nc };
+        }
+      } else {
+        for (let nr = this.selectedR + 1; nr < this.puzzle.height; nr++) {
+          const cell = this.cells[nr][this.selectedC];
+          if (!cell || cell.isBlack) break;
+          return { r: nr, c: this.selectedC };
+        }
+      }
+      return null;
+    }
+
+    updateHighlights() {
+      for (const row of this.cells) {
+        for (const cell of row) {
+          cell.isHighlighted = false;
+          cell.isActive = false;
+        }
+      }
+      if (this.selectedR < 0) return;
+      const wordCells = this.getWordCells(this.selectedR, this.selectedC, this.direction);
+      for (const wc of wordCells) wc.isHighlighted = true;
+      const active = this.cells[this.selectedR]?.[this.selectedC];
+      if (active) active.isActive = true;
+    }
+
+    resetGame() {
+      this.loadPuzzle(this.puzzleIdx);
+    }
+
+    startTimer() {
+      if (this.timerInterval) clearInterval(this.timerInterval);
+      this.timerInterval = setInterval(() => {
+        if (this.isComplete) return;
+        this.elapsed = Math.floor((Date.now() - this.startTime) / 1000);
+        document.getElementById('timer').textContent = this.formatTime(this.elapsed);
+      }, 200);
+    }
+
+    formatTime(s) {
+      const m = Math.floor(s / 60);
+      const sec = s % 60;
+      return String(m).padStart(2,'0') + ':' + String(sec).padStart(2,'0');
+    }
+
+    renderAll() {
+      this.renderGrid();
+      this.renderClues();
+      this.renderHeader();
+    }
+
+    renderGrid() {
+      const gridEl = document.getElementById('grid');
+      let html = '';
+      for (const row of this.cells) {
+        html += '<div class="grid-row">';
+        for (const cell of row) {
+          let cls = 'cell';
+          if (cell.isBlack) cls += ' black';
+          if (cell.isHighlighted && !cell.isBlack) cls += ' highlighted';
+          if (cell.isActive) cls += ' active';
+          if (cell.userLetter && cell.userLetter === cell.answer) cls += ' correct';
+          else if (cell.userLetter && cell.userLetter !== cell.answer) cls += ' wrong';
+
+          html += `<div class="${cls}" onclick="game.selectCell(${cell.r},${cell.c})">`;
+          if (cell.clueNumber > 0 && !cell.isBlack) {
+            html += `<span class="cell-number">${cell.clueNumber}</span>`;
+          }
+          if (!cell.isBlack) {
+            html += `<span class="cell-text">${cell.userLetter || ''}</span>`;
+          }
+          html += '</div>';
+        }
+        html += '</div>';
+      }
+      gridEl.innerHTML = html;
+    }
+
+    renderClues() {
+      const p = this.puzzle;
+      const seen = new Set();
+      const clues = p.clues
+        .filter(c => {
+          if (c.d !== this.direction) return false;
+          const key = c.n + '-' + c.d;
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        })
+        .sort((a, b) => a.n - b.n);
+
+      const activeClue = this.selectedR >= 0 ? this.findClue(this.selectedR, this.selectedC, this.direction) : null;
+
+      let html = '';
+      for (const clue of clues) {
+        let cls = 'clue-item';
+        if (this.completedClues.has(clue.n)) cls += ' completed';
+        if (activeClue && clue.n === activeClue.n) cls += ' active';
+        html += `<div class="${cls}" onclick="game.onCluePress(${clue.r},${clue.c})">${clue.n}. ${clue.q}</div>`;
+      }
+      document.getElementById('clueList').innerHTML = html || '<div style="padding:8px;font-size:12px;color:#94a3b8;flex-shrink:0;">暂无可用的提示</div>';
+    }
+
+    onCluePress(r, c) {
+      this.selectedR = r;
+      this.selectedC = c;
+      this.updateHighlights();
+      this.renderAll();
+    }
+
+    renderHeader() {
+      document.getElementById('puzzleTitle').textContent = this.puzzle.title;
+      const total = this.cells.flat().filter(c => !c.isBlack).length;
+      const pct = total > 0 ? Math.round(this.correctCells / total * 100) : 0;
+      document.getElementById('progress').textContent = `${this.correctCells}/${total} (${pct}%)`;
+      document.getElementById('progressFill').style.width = pct + '%';
+    }
+
+    renderPuzzleTabs() {
+      const container = document.getElementById('puzzleTabs');
+      container.innerHTML = PUZZLES.map((p, i) =>
+        `<div class="puzzle-tab${i === this.puzzleIdx ? ' active' : ''}" onclick="game.loadPuzzle(${i})">${p.title}</div>`
+      ).join('');
+    }
+
+    updatePuzzleTabs() {
+      document.querySelectorAll('.puzzle-tab').forEach((tab, i) => {
+        tab.classList.toggle('active', i === this.puzzleIdx);
+      });
+    }
+
+    updateClueTabs() {
+      document.querySelectorAll('.clue-tab').forEach(tab => {
+        tab.classList.toggle('active', tab.dataset.dir === this.direction);
+      });
+    }
+
+    renderKeyboard() {
+      const kb = document.getElementById('keyboard');
+      let html = '';
+      for (const row of CHINESE_ROWS) {
+        html += '<div class="key-row">';
+        for (const char of row) {
+          html += `<button class="key" onclick="game.enterLetter('${char}')">${char}</button>`;
+        }
+        html += '</div>';
+      }
+      html += '<div class="key-row"><button class="key key-del" onclick="game.deleteLetter()">⌫ 删除</button></div>';
+      kb.innerHTML = html;
+    }
+
+    showCompletion() {
+      if (this.timerInterval) clearInterval(this.timerInterval);
+      const total = this.cells.flat().filter(c => !c.isBlack).length;
+      const acc = total > 0 ? Math.round(this.correctCells / total * 100) : 0;
+      document.getElementById('modalTime').textContent = this.formatTime(this.elapsed);
+      document.getElementById('modalAccuracy').textContent = acc + '%';
+      document.getElementById('modalScore').textContent = `${this.correctCells}/${total}`;
+      document.getElementById('completionModal').classList.add('show');
+    }
+  }
+
+  const game = new CrosswordGame();
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Backspace') { game.deleteLetter(); e.preventDefault(); return; }
+    if (e.key.length === 1) {
+      for (const row of CHINESE_ROWS) {
+        if (row.includes(e.key)) { game.enterLetter(e.key); return; }
+      }
+    }
+  });
+</script>
+</body>
+</html>
